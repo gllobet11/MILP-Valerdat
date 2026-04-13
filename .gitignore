@@ -1,1 +1,22 @@
-./plots
+#Entornos virtuales
+.venv/
+venv/
+
+# Archivos compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Carpetas de salida
+plots/
+
+# Archivos del sistema operativo (como el que aparece al final de tu explorador)
+*:Zone.Identifier
+.DS_Store
+Thumbs.db
+
+# Variables de entorno (recomendado por seguridad, en caso de que agregues uno)
+.env
+
+#Enunciado
+Prueba Técnica Valerdat - Supply Chain Optimization.md

@@ -88,83 +88,175 @@ def train_forecast(
     return models, val_metrics
 
 
+def compute_empirical_sigma(
+    models: dict,
+    feature_df: pd.DataFrame,
+    val_months: int = 3,
+) -> pd.Series:
+    """
+    Sigma empírica semanal del error de forecast en validación.
+    Autocontenida: genera las predicciones internamente para no depender
+    de que el caller haya añadido pred_q50 previamente.
+    Más robusta que la sigma cuantílica para SKUs de alta varianza.
+    """
+    feature_df = feature_df.copy()
+    feature_df["date"] = pd.to_datetime(feature_df["date"])
+
+    cutoff = feature_df["date"].max() - pd.DateOffset(months=val_months)
+    val_df = feature_df[feature_df["date"] > cutoff].copy()
+
+    val_df["pred_q50"] = models[0.50].predict(val_df[FEATURE_COLS]).clip(0)
+
+    val_df["week"] = val_df["date"].dt.to_period("W")
+    weekly_err = (
+        val_df.groupby(["product_id", "week"])
+        .agg(actual=("demand", "sum"), pred=("pred_q50", "sum"))
+        .reset_index()
+    )
+    weekly_err["error"] = weekly_err["actual"] - weekly_err["pred"]
+    return weekly_err.groupby("product_id")["error"].std().rename("sigma_empirical")
+
+
 def generate_forecast(
     models: dict,
     feature_df: pd.DataFrame,
     products_df: pd.DataFrame,
     horizon_start: str,
     n_weeks: int = 4,
+    empirical_sigma: pd.Series = None,
 ) -> pd.DataFrame:
     """
     Generate weekly forecasts for the optimization horizon.
 
-    Strategy: use the last known lag/rolling values (from the most recent
-    available rows) to predict one day at a time for each product, then
-    aggregate to weekly buckets.
+    Strategy: recursive day-ahead forecasting per product. Each day's
+    prediction is appended to the working history so that lag and rolling
+    features for subsequent days reflect previously predicted values rather
+    than stale last-known values.
+
+    Fixes applied vs. original:
+      1. Recursive inference: lags/rolling recomputed each step from the
+         growing history (predicted values feed future lags).
+      2. Sigma aggregated correctly: computed per day, then combined via
+         quadrature sum (sqrt of sum of squares) — quantiles are not additive.
+      3. demand_hat clipped to 0, not 0.1 (MOQ in MILP handles minimum orders).
 
     Returns
     -------
-    forecast_df : [product_id, period_t, demand_hat, sigma, safety_stock]
+    forecast_df : DataFrame[product_id, period_t, demand_hat, sigma, safety_stock]
     """
     feature_df = feature_df.copy()
     feature_df["date"] = pd.to_datetime(feature_df["date"])
     horizon_start_dt = pd.Timestamp(horizon_start)
 
-    # Build per-product prediction rows for each day of the horizon
     horizon_dates = pd.date_range(horizon_start_dt, periods=n_weeks * 7, freq="D")
     week_map = {d: (i // 7) + 1 for i, d in enumerate(horizon_dates)}
 
-    records = []
+    # Lead time lookup
+    lt_map = products_df.set_index("product_id")["lead_time_weeks"]
+
+    all_records = []
+
     for pid, grp in feature_df.groupby("product_id"):
-        grp = grp.sort_values("date")
-        last_known = grp.iloc[-1]  # most recent feature row
+        grp = grp.sort_values("date").reset_index(drop=True)
+
+        # Working history: real demand column only — we'll recompute features
+        # from it at each step. Keep enough tail to cover the longest lag (28d)
+        # plus the longest rolling window (28d) → 56 rows is safe.
+        history = grp[["date", "product_id", "demand", "product_code"]].tail(60).copy()
+
+        product_code = int(grp["product_code"].iloc[-1])
 
         for date in horizon_dates:
-            # Calendar features
+            # ── Calendar features (deterministic) ────────────────────────
             row = {
-                "product_code": last_known["product_code"],
-                "day_of_week": date.dayofweek,
+                "product_code": product_code,
+                "day_of_week":  date.dayofweek,
                 "week_of_year": date.isocalendar()[1],
-                "month": date.month,
-                "quarter": date.quarter,
-                "is_weekend": int(date.dayofweek >= 5),
-                "day_of_year": date.timetuple().tm_yday,
-                # reuse last-known lag/rolling (reasonable for short horizon)
-                "lag_7": last_known["lag_7"],
-                "lag_14": last_known["lag_14"],
-                "lag_28": last_known["lag_28"],
-                "rolling_mean_7": last_known["rolling_mean_7"],
-                "rolling_mean_28": last_known["rolling_mean_28"],
-                "rolling_std_7": last_known["rolling_std_7"],
-                "rolling_std_28": last_known["rolling_std_28"],
+                "month":        date.month,
+                "quarter":      date.quarter,
+                "is_weekend":   int(date.dayofweek >= 5),
+                "day_of_year":  date.timetuple().tm_yday,
             }
-            records.append({"date": date, "product_id": pid, **row})
 
-    pred_df = pd.DataFrame(records)
-    X_pred = pred_df[FEATURE_COLS]
+            # ── Lag features from rolling history ────────────────────────
+            demand_series = history["demand"].values  # ordered oldest → newest
 
-    pred_df["q10"] = np.clip(models[0.10].predict(X_pred), 0, None)
-    pred_df["q50"] = np.clip(models[0.50].predict(X_pred), 0, None)
-    pred_df["q90"] = np.clip(models[0.90].predict(X_pred), 0, None)
-    pred_df["period_t"] = pred_df["date"].map(week_map)
+            def _lag(n: int) -> float:
+                """demand n days ago; NaN if not enough history."""
+                return float(demand_series[-n]) if len(demand_series) >= n else np.nan
 
-    # ── Aggregate to weekly totals ────────────────────────────────────────
+            def _rolling_mean(window: int) -> float:
+                tail = demand_series[-window:] if len(demand_series) >= window else demand_series
+                return float(np.mean(tail))
+
+            def _rolling_std(window: int) -> float:
+                tail = demand_series[-window:] if len(demand_series) >= window else demand_series
+                return float(np.std(tail, ddof=1)) if len(tail) > 1 else 0.0
+
+            row["lag_7"]          = _lag(7)
+            row["lag_14"]         = _lag(14)
+            row["lag_28"]         = _lag(28)
+            row["rolling_mean_7"] = _rolling_mean(7)
+            row["rolling_mean_28"]= _rolling_mean(28)
+            row["rolling_std_7"]  = _rolling_std(7)
+            row["rolling_std_28"] = _rolling_std(28)
+
+            # ── Predict all three quantiles ───────────────────────────────
+            X = pd.DataFrame([row])[FEATURE_COLS]
+            q10 = float(np.clip(models[0.10].predict(X)[0], 0, None))
+            q50 = float(np.clip(models[0.50].predict(X)[0], 0, None))
+            q90 = float(np.clip(models[0.90].predict(X)[0], 0, None))
+
+            # Sigma at daily level (correct: before aggregation)
+            sigma_daily = (q90 - q10) / (2 * Z_ALPHA)
+
+            all_records.append({
+                "date":        date,
+                "product_id":  pid,
+                "period_t":    week_map[date],
+                "q50":         q50,
+                "q10":         q10,
+                "q90":         q90,
+                "sigma_daily": sigma_daily,
+            })
+
+            # ── Append q50 prediction to history for next step ───────────
+            new_row = pd.DataFrame([{
+                "date":         date,
+                "product_id":   pid,
+                "demand":       q50,   # predicted value feeds future lags
+                "product_code": product_code,
+            }])
+            history = pd.concat([history, new_row], ignore_index=True)
+
+    pred_df = pd.DataFrame(all_records)
+
+    # ── Aggregate to weekly buckets ───────────────────────────────────────
     weekly = (
         pred_df.groupby(["product_id", "period_t"])
-        .agg(demand_hat=("q50", "sum"), q10=("q10", "sum"), q90=("q90", "sum"))
+        .agg(
+            demand_hat  =("q50",         "sum"),
+            q10         =("q10",         "sum"),   # for reference only
+            q90         =("q90",         "sum"),   # for reference only
+            # FIX 2: quadrature sum — sigma of a sum of independent r.v.s
+            # is sqrt(sum of variances), not sum of sigmas
+            sigma       =("sigma_daily", lambda x: float(np.sqrt((x ** 2).sum()))),
+        )
         .reset_index()
     )
-    weekly["demand_hat"] = weekly["demand_hat"].clip(lower=0.1)
 
-    # sigma from quantile spread
-    weekly["sigma"] = (weekly["q90"] - weekly["q10"]) / (2 * Z_ALPHA)
-    weekly["sigma"] = weekly["sigma"].clip(lower=0.01)
+    # FIX 3: clip to 0, not 0.1 — MOQ constraints in the MILP handle minimums
+    weekly["demand_hat"] = weekly["demand_hat"].clip(lower=0)
+    weekly["sigma"]      = weekly["sigma"].clip(lower=0.01)
 
-    # merge lead time
-    lt = products_df.set_index("product_id")["lead_time_weeks"]
-    weekly["lead_time"] = weekly["product_id"].map(lt)
+    # ── Hybrid sigma: max(quantile sigma, empirical sigma) ────────────────
+    if empirical_sigma is not None:
+        weekly["sigma_empirical"] = weekly["product_id"].map(empirical_sigma).fillna(0)
+        weekly["sigma"] = weekly[["sigma", "sigma_empirical"]].max(axis=1)
+        weekly["sigma"] = weekly["sigma"].clip(lower=0.01)
 
-    # dynamic safety stock
+    # ── Dynamic safety stock ──────────────────────────────────────────────
+    weekly["lead_time"]    = weekly["product_id"].map(lt_map)
     weekly["safety_stock"] = (
         Z_ALPHA * weekly["sigma"] * np.sqrt(weekly["lead_time"])
     ).clip(lower=0)

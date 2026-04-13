@@ -35,7 +35,7 @@ import pandas as pd
 
 from src.data_generator import generate_all
 from src.feature_engineering import build_features
-from src.forecast import train_forecast, generate_forecast
+from src.forecast import train_forecast, generate_forecast, compute_empirical_sigma
 from src.optimizer import build_and_solve
 from src.reporting import report_kpis
 
@@ -67,12 +67,17 @@ def main():
     print("\n[3/5] Training LightGBM quantile models …")
     models, val_metrics = train_forecast(feature_df, products_df, val_months=3)
 
+    # ── Step 3.5: Empirical sigma para sigma híbrida ──────────────────────
+    print("  [forecast] Computing empirical sigma from validation errors …")
+    emp_sigma = compute_empirical_sigma(models, feature_df, val_months=3)
+
     # ── Step 4: Generate forecast for optimizer horizon ───────────────────
     print("\n[4/5] Forecasting demand for optimization horizon …")
     forecast_df = generate_forecast(
         models, feature_df, products_df,
         horizon_start=HORIZON_START,
         n_weeks=N_WEEKS,
+        empirical_sigma=emp_sigma,
     )
     forecast_df.to_csv(f"{DATA_DIR}/forecast_output.csv", index=False)
     print(f"  Forecast saved → {DATA_DIR}/forecast_output.csv")
