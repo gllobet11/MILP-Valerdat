@@ -1,0 +1,51 @@
+product_id,name,category,unit_value,holding_cost,stockout_penalty,unit_volume,initial_stock,lead_time_weeks
+P00,"Laptop 15""",electronics,1200.0,7.3076,2326.65,0.8,269,4
+P01,"Laptop 13""",electronics,900.0,5.6864,1977.63,0.7,238,4
+P02,"Monitor 24""",electronics,250.0,1.0636,618.91,0.6,315,3
+P03,"Monitor 27""",electronics,350.0,2.1193,800.12,0.7,312,2
+P04,Keyboard Wireless,electronics,45.0,0.1956,87.77,0.15,769,4
+P05,Mouse Wireless,electronics,35.0,0.175,84.94,0.08,734,3
+P06,USB-C Hub,electronics,55.0,0.3156,127.75,0.05,726,2
+P07,Webcam HD,electronics,80.0,0.4158,138.18,0.1,520,2
+P08,Headset BT,electronics,120.0,0.6597,187.66,0.15,324,2
+P09,SSD 1TB,electronics,90.0,0.5611,191.85,0.03,397,2
+P10,SSD 512GB,electronics,60.0,0.3628,111.27,0.03,854,3
+P11,RAM 16GB,electronics,55.0,0.3641,131.62,0.02,575,2
+P12,RAM 8GB,electronics,30.0,0.183,50.84,0.02,664,3
+P13,GPU Entry,electronics,350.0,1.8411,540.33,0.4,307,3
+P14,"Tablet 10""",electronics,280.0,1.2366,611.25,0.3,439,2
+P15,Phone Charger 65W,electronics,25.0,0.1503,61.69,0.05,859,3
+P16,Extension Cable,electronics,15.0,0.0732,28.06,0.1,980,4
+P17,Paper A4 (500sh),consumables,6.0,0.0236,7.88,0.25,4799,4
+P18,Paper A3 (250sh),consumables,9.0,0.0293,13.37,0.3,2303,4
+P19,Pen Box (12u),consumables,5.0,0.0173,8.01,0.05,1556,3
+P20,Marker Set,consumables,8.0,0.031,13.6,0.05,841,3
+P21,Staples Box,consumables,3.0,0.0132,4.16,0.03,1135,2
+P22,Binder A4,consumables,4.0,0.0187,6.73,0.08,1435,4
+P23,Sticky Notes,consumables,3.0,0.0113,4.12,0.03,1435,3
+P24,Label Roll,consumables,12.0,0.0524,15.41,0.05,591,2
+P25,Toner Black,consumables,65.0,0.221,78.29,0.1,677,3
+P26,Toner Color,consumables,85.0,0.3888,135.91,0.12,350,2
+P27,Ink Cartridge Blk,consumables,18.0,0.0794,30.03,0.05,879,4
+P28,Ink Cartridge Col,consumables,24.0,0.094,36.99,0.05,633,3
+P29,Cleaning Wipes,consumables,8.0,0.0262,10.15,0.08,1261,2
+P30,Hand Sanitizer 1L,consumables,7.0,0.0304,10.38,0.1,2232,4
+P31,Coffee Pods (50u),consumables,15.0,0.062,24.88,0.15,1858,2
+P32,Tea Bags (100u),consumables,6.0,0.0256,9.19,0.08,1386,4
+P33,Safety Helmet,industrial,35.0,0.1441,85.96,0.3,807,4
+P34,Safety Gloves L,industrial,12.0,0.0367,31.86,0.08,1207,1
+P35,Safety Gloves M,industrial,12.0,0.0412,31.35,0.08,1382,2
+P36,Hi-Vis Vest,industrial,18.0,0.0847,42.32,0.1,975,4
+P37,Safety Boots 42,industrial,85.0,0.2649,205.88,0.3,266,3
+P38,Safety Boots 43,industrial,85.0,0.3049,254.39,0.3,458,2
+P39,Safety Boots 44,industrial,85.0,0.3497,269.95,0.3,292,3
+P40,First Aid Kit,industrial,45.0,0.1948,117.43,0.25,840,3
+P41,Fire Extinguisher 2kg,industrial,55.0,0.2545,123.78,0.4,297,4
+P42,Fire Extinguisher 6kg,industrial,95.0,0.2893,202.83,0.6,125,4
+P43,Cable Ties (100u),industrial,8.0,0.0356,21.54,0.04,2453,3
+P44,Zip Ties Heavy,industrial,12.0,0.0399,33.02,0.06,1798,4
+P45,WD-40 400ml,industrial,9.0,0.0297,27.4,0.05,1467,2
+P46,Lubricant Spray,industrial,11.0,0.0428,28.29,0.05,841,1
+P47,Drill Bit Set,industrial,45.0,0.1621,132.54,0.2,761,3
+P48,Screwdriver Set,industrial,55.0,0.2048,117.23,0.15,686,3
+P49,Utility Knife,industrial,15.0,0.0485,51.64,0.05,766,4

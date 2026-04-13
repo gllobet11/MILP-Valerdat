@@ -1,0 +1,5 @@
+supplier_id,name,fixed_cost,min_order_euros,base_lead_time
+S0,SupplierAlpha,150.0,500.0,1
+S1,SupplierBeta,80.0,300.0,1
+S2,SupplierGamma,200.0,1000.0,3
+S3,SupplierDelta,120.0,600.0,2
